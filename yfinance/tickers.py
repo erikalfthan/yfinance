@@ -57,20 +57,20 @@ class Tickers():
 
     def history(self, period="1mo", interval="1d",
                 start=None, end=None, prepost=False,
-                actions=True, auto_adjust=True, proxy=None,
+                actions=True, auto_adjust=True,
                 threads=True, group_by='column', progress=True,
                 **kwargs):
 
         return self.download(
                 period, interval,
                 start, end, prepost,
-                actions, auto_adjust, proxy,
+                actions, auto_adjust, 
                 threads, group_by, progress,
                 **kwargs)
 
     def download(self, period="1mo", interval="1d",
                  start=None, end=None, prepost=False,
-                 actions=True, auto_adjust=True, proxy=None,
+                 actions=True, auto_adjust=True,
                  threads=True, group_by='column', progress=True,
                  **kwargs):
 
@@ -81,7 +81,6 @@ class Tickers():
                               period=period,
                               interval=interval,
                               prepost=prepost,
-                              proxy=proxy,
                               group_by='ticker',
                               threads=threads,
                               progress=progress,
