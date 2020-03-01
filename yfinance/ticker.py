@@ -23,7 +23,6 @@ from __future__ import print_function
 
 # import time as _time
 import datetime as _datetime
-import requests as _requests
 import pandas as _pd
 # import numpy as _np
 
@@ -39,7 +38,7 @@ class Ticker(TickerBase):
     def __repr__(self):
         return 'yfinance.Ticker object <%s>' % self.ticker
 
-    def _download_options(self, date=None, proxy=None):
+    def _download_options(self, date=None):
         if date is None:
             url = "{}/v7/finance/options/{}".format(
                 self._base_url, self.ticker)
@@ -47,13 +46,7 @@ class Ticker(TickerBase):
             url = "{}/v7/finance/options/{}?date={}".format(
                 self._base_url, self.ticker, date)
 
-        # setup proxy in requests format
-        if proxy is not None:
-            if isinstance(proxy, dict) and "https" in proxy:
-                proxy = proxy["https"]
-            proxy = {"https": proxy}
-
-        r = _requests.get(url=url, proxies=proxy).json()
+        r = self._session.get(url=url).json()
         if r['optionChain']['result']:
             for exp in r['optionChain']['result'][0]['expirationDates']:
                 self._expirations[_datetime.datetime.fromtimestamp(
@@ -84,9 +77,9 @@ class Ticker(TickerBase):
             data['lastTradeDate'] = data['lastTradeDate'].tz_localize(tz)
         return data
 
-    def option_chain(self, date=None, proxy=None, tz=None):
+    def option_chain(self, date=None, tz=None):
         if date is None:
-            options = self._download_options(proxy=proxy)
+            options = self._download_options()
         else:
             if not self._expirations:
                 self._download_options()
@@ -96,7 +89,7 @@ class Ticker(TickerBase):
                     "Available expiration are: [%s]" % (
                         date, ', '.join(self._expirations)))
             date = self._expirations[date]
-            options = self._download_options(date, proxy=proxy)
+            options = self._download_options(date)
 
         return _namedtuple('Options', ['calls', 'puts'])(**{
             "calls": self._options2df(options['calls'], tz=tz),

@@ -42,6 +42,10 @@ from . import shared
 
 
 class TickerBase():
+    cookies = {}
+    headers = {}
+    proxies = {}
+    
     def __init__(self, ticker):
         self.ticker = ticker.upper()
         self._history = None
@@ -71,11 +75,35 @@ class TickerBase():
         self._cashflow = {
             "yearly": utils.empty_df(),
             "quarterly": utils.empty_df()}
-
+        self._session = _requests.Session()
+        self._session.cookies.update(self.cookies)
+        self._session.headers.update(self.headers)
+        self._session.proxies = self.proxies
+    
+    @classmethod
+    def set_headers(cls, headers, update=True):
+        if update:
+            cls.headers.update(headers)
+        else:
+            cls.headers = headers
+    
+    @classmethod
+    def set_proxy(cls, proxy):
+        if type(proxy) == dict:
+            cls.proxies = proxy
+        elif type(proxy) == str:
+            cls.proxies = {'http': proxy, 'https': proxy}
+        else:
+            raise TypeError('proxy must be dict or string with https proxy')
+    
+    @classmethod
+    def set_cookies(cls, cookies):
+        cls.cookies.update(cookies)
+        
     def history(self, period="1mo", interval="1d",
                 start=None, end=None, prepost=False, actions=True,
                 auto_adjust=True, back_adjust=False,
-                proxy=None, rounding=True, tz=None, **kwargs):
+                rounding=True, tz=None, **kwargs):
         """
         :Parameters:
             period : str
@@ -97,8 +125,6 @@ class TickerBase():
                 Adjust all OHLC automatically? Default is True
             back_adjust: bool
                 Back-adjusted data to mimic true historical prices
-            proxy: str
-                Optional. Proxy server URL scheme. Default is None
             rounding: bool
                 Round values to 2 decimal places?
                 Optional. Default is False = precision suggested by Yahoo!
@@ -139,15 +165,9 @@ class TickerBase():
         if params["interval"] == "30m":
             params["interval"] = "15m"
 
-        # setup proxy in requests format
-        if proxy is not None:
-            if isinstance(proxy, dict) and "https" in proxy:
-                proxy = proxy["https"]
-            proxy = {"https": proxy}
-
         # Getting data from json
         url = "{}/v8/finance/chart/{}".format(self._base_url, self.ticker)
-        data = _requests.get(url=url, params=params, proxies=proxy)
+        data = self._session.get(url=url, params=params)
         if "Will be right back" in data.text:
             raise RuntimeError("*** YAHOO! FINANCE IS CURRENTLY DOWN! ***\n"
                                "Our engineers are working quickly to resolve "
@@ -247,7 +267,7 @@ class TickerBase():
 
     # ------------------------
 
-    def _get_fundamentals(self, kind=None, proxy=None):
+    def _get_fundamentals(self, kind=None):
         def cleanup(data):
             df = _pd.DataFrame(data).drop(columns=['maxAge'])
             for col in df.columns:
@@ -266,18 +286,12 @@ class TickerBase():
             df.index = utils.camel2title(df.index)
             return df
 
-        # setup proxy in requests format
-        if proxy is not None:
-            if isinstance(proxy, dict) and "https" in proxy:
-                proxy = proxy["https"]
-            proxy = {"https": proxy}
-
         if self._fundamentals:
             return
 
         # get info and sustainability
         url = '%s/%s' % (self._scrape_url, self.ticker)
-        data = utils.get_json(url, proxy)
+        data = utils.get_json(url, self._session)
 
         # holders
         url = "{}/{}/holders".format(self._scrape_url, self.ticker)
@@ -351,7 +365,7 @@ class TickerBase():
             pass
 
         # get fundamentals
-        data = utils.get_json(url+'/financials', proxy)
+        data = utils.get_json(url+'/financials', self._session)
 
         # generic patterns
         for key in (
@@ -383,98 +397,98 @@ class TickerBase():
 
         self._fundamentals = True
 
-    def get_recommendations(self, proxy=None, as_dict=False, *args, **kwargs):
-        self._get_fundamentals(proxy)
+    def get_recommendations(self, as_dict=False, *args, **kwargs):
+        self._get_fundamentals()
         data = self._recommendations
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_calendar(self, proxy=None, as_dict=False, *args, **kwargs):
-        self._get_fundamentals(proxy)
+    def get_calendar(self, as_dict=False, *args, **kwargs):
+        self._get_fundamentals()
         data = self._calendar
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_major_holders(self, proxy=None, as_dict=False, *args, **kwargs):
-        self._get_fundamentals(proxy)
+    def get_major_holders(self, as_dict=False, *args, **kwargs):
+        self._get_fundamentals()
         data = self._major_holders
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_institutional_holders(self, proxy=None, as_dict=False, *args, **kwargs):
-        self._get_fundamentals(proxy)
+    def get_institutional_holders(self, as_dict=False, *args, **kwargs):
+        self._get_fundamentals()
         data = self._institutional_holders
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_info(self, proxy=None, as_dict=False, *args, **kwargs):
-        self._get_fundamentals(proxy)
+    def get_info(self, as_dict=False, *args, **kwargs):
+        self._get_fundamentals()
         data = self._info
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_sustainability(self, proxy=None, as_dict=False, *args, **kwargs):
-        self._get_fundamentals(proxy)
+    def get_sustainability(self, as_dict=False, *args, **kwargs):
+        self._get_fundamentals()
         data = self._sustainability
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_earnings(self, proxy=None, as_dict=False, freq="yearly"):
-        self._get_fundamentals(proxy)
+    def get_earnings(self, as_dict=False, freq="yearly"):
+        self._get_fundamentals()
         data = self._earnings[freq]
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_financials(self, proxy=None, as_dict=False, freq="yearly"):
-        self._get_fundamentals(proxy)
+    def get_financials(self, as_dict=False, freq="yearly"):
+        self._get_fundamentals()
         data = self._financials[freq]
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_balancesheet(self, proxy=None, as_dict=False, freq="yearly"):
-        self._get_fundamentals(proxy)
+    def get_balancesheet(self, as_dict=False, freq="yearly"):
+        self._get_fundamentals()
         data = self._balancesheet[freq]
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_balance_sheet(self, proxy=None, as_dict=False, freq="yearly"):
-        return self.get_balancesheet(proxy, as_dict, freq)
+    def get_balance_sheet(self, as_dict=False, freq="yearly"):
+        return self.get_balancesheet(as_dict, freq)
 
-    def get_cashflow(self, proxy=None, as_dict=False, freq="yearly"):
-        self._get_fundamentals(proxy)
+    def get_cashflow(self, as_dict=False, freq="yearly"):
+        self._get_fundamentals()
         data = self._cashflow[freq]
         if as_dict:
             return data.to_dict()
         return data
 
-    def get_dividends(self, proxy=None):
+    def get_dividends(self):
         if self._history is None:
-            self.history(period="max", proxy=proxy)
+            self.history(period="max")
         dividends = self._history["Dividends"]
         return dividends[dividends != 0]
 
-    def get_splits(self, proxy=None):
+    def get_splits(self):
         if self._history is None:
-            self.history(period="max", proxy=proxy)
+            self.history(period="max")
         splits = self._history["Stock Splits"]
         return splits[splits != 0]
 
-    def get_actions(self, proxy=None):
+    def get_actions(self):
         if self._history is None:
-            self.history(period="max", proxy=proxy)
+            self.history(period="max")
         actions = self._history[["Dividends", "Stock Splits"]]
         return actions[actions != 0].dropna(how='all').fillna(0)
 
-    def get_isin(self, proxy=None):
+    def get_isin(self):
         # *** experimental ***
         if self._isin is not None:
             return self._isin
@@ -485,21 +499,15 @@ class TickerBase():
             self._isin = '-'
             return self._isin
 
-        # setup proxy in requests format
-        if proxy is not None:
-            if isinstance(proxy, dict) and "https" in proxy:
-                proxy = proxy["https"]
-            proxy = {"https": proxy}
-
         q = ticker
-        self.get_info(proxy=proxy)
+        self.get_info()
         if "shortName" in self._info:
             q = self._info['shortName']
 
         url = 'https://markets.businessinsider.com/ajax/' \
               'SearchController_Suggest?max_results=25&query=%s' \
             % urlencode(q)
-        data = _requests.get(url=url, proxies=proxy).text
+        data = self._session.get(url=url).text
 
         search_str = '"{}|'.format(ticker)
         if search_str not in data:
