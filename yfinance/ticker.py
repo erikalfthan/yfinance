@@ -147,6 +147,10 @@ class Ticker(TickerBase):
         return self.get_earnings(freq='quarterly')
 
     @property
+    def estimates(self):
+        return self.get_estimates()
+
+    @property
     def financials(self):
         return self.get_financials()
 

@@ -295,15 +295,18 @@ class TickerBase():
 
         # holders
         url = "{}/{}/holders".format(self._scrape_url, self.ticker)
-        holders = _pd.read_html(url)
-        self._major_holders = holders[0]
-        self._institutional_holders = holders[1]
-        if 'Date Reported' in self._institutional_holders:
-            self._institutional_holders['Date Reported'] = _pd.to_datetime(
-                self._institutional_holders['Date Reported'])
-        if '% Out' in self._institutional_holders:
-            self._institutional_holders['% Out'] = self._institutional_holders[
-                '% Out'].str.replace('%', '').astype(float)/100
+        try:
+            holders = _pd.read_html(url)
+            self._major_holders = holders[0]
+            self._institutional_holders = holders[1]
+            if 'Date Reported' in self._institutional_holders:
+                self._institutional_holders['Date Reported'] = _pd.to_datetime(
+                    self._institutional_holders['Date Reported'])
+            if '% Out' in self._institutional_holders:
+                self._institutional_holders['% Out'] = self._institutional_holders[
+                    '% Out'].str.replace('%', '').astype(float)/100
+        except Exception:
+            pass
 
         # sustainability
         d = {}
@@ -329,7 +332,7 @@ class TickerBase():
             if isinstance(data.get(item), dict):
                 self._info.update(data[item])
 
-        self._info['regularMarketPrice'] = self._info['regularMarketOpen']
+        self._info['regularMarketPrice'] = self._info.get('regularMarketOpen', None)
         self._info['logo_url'] = ""
         try:
             domain = self._info['website'].split(
@@ -365,7 +368,8 @@ class TickerBase():
             pass
 
         # get fundamentals
-        data = utils.get_json(url+'/financials', self._session)
+        url = "{}/{}/financials".format(self._scrape_url, self.ticker)
+        data = utils.get_json(url, self._session)
 
         # generic patterns
         for key in (
@@ -394,6 +398,17 @@ class TickerBase():
             df.columns = utils.camel2title(df.columns)
             df.index.name = 'Quarter'
             self._earnings['quarterly'] = df
+            
+            estimates = data['earnings']['earningsChart']
+            df = _pd.DataFrame(estimates['quarterly'])
+            try:
+                df = df.append({'estimate': estimates['currentQuarterEstimate'], 'date': estimates['currentQuarterEstimateDate'] + str(estimates['currentQuarterEstimateYear'])}, ignore_index=True)
+                df['date'] = _pd.to_datetime(df['date'])
+                df = df.set_index('date')
+            except:
+                logging.info('No estimates for current quarter')
+                print(df)
+            self._earnings['estimated_eps'] = df
 
         self._fundamentals = True
 
@@ -445,6 +460,13 @@ class TickerBase():
         if as_dict:
             return data.to_dict()
         return data
+    
+    def get_estimates(self, as_dict=False):
+        self._get_fundamentals()
+        data = self._earnings['estimated_eps']
+        if as_dict:
+            return data.to_dict()
+        return data    
 
     def get_financials(self, as_dict=False, freq="yearly"):
         self._get_fundamentals()
@@ -459,9 +481,6 @@ class TickerBase():
         if as_dict:
             return data.to_dict()
         return data
-
-    def get_balance_sheet(self, as_dict=False, freq="yearly"):
-        return self.get_balancesheet(as_dict, freq)
 
     def get_cashflow(self, as_dict=False, freq="yearly"):
         self._get_fundamentals()
